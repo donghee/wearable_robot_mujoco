@@ -1,6 +1,6 @@
 [project]
-name = "sim-human-0828"
-version = "0.1.0"
+name = "sim_human"
+version = "0.8.28"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -10,5 +10,4 @@ dependencies = [
     "matplotlib>=3.10.6",
     "mujoco>=3.3.5",
     "numpy>=2.2.6",
-    "scipy>=1.15.3",
 ]

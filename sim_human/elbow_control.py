@@ -4,6 +4,12 @@ import cvxpy as cp
 import json
 
 
+import os
+from ament_index_python.packages import get_package_share_directory
+share_dir = get_package_share_directory("sim_human")
+patient_models = os.path.join(share_dir, "config", "patient_models.json")
+#  patient_models = "patient_models.json"
+
 class ElbowMuscleBrain():
     
     def __init__(self, PModel, kp=25.0, kd=3.0, xml_path="myoelbow_1dof6muscles.xml"):
@@ -16,7 +22,7 @@ class ElbowMuscleBrain():
         self.ctrl_period = 0.02
 
         # Patient parameters
-        self._load_model_from_json("patient_models.json", PModel)
+        self._load_model_from_json(patient_models, PModel)
 
         # trajectory planning parameters
         self.current_time = 0.0

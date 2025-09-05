@@ -4,10 +4,20 @@ import imageio
 import time
 import numpy as np
 import matplotlib.pyplot as plt
-from ElbowControl import ElbowMuscleBrain
+#  from ElbowControl import ElbowMuscleBrain
+import sys
+import os
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(current_dir)
+from elbow_control import ElbowMuscleBrain
 
 # Env generation
-env = ElbowMuscleBrain("M1", kp=25.0, kd=3.0, xml_path="myoelbow_1dof6muscles_1dofexo.xml")
+# get xml path from  ros2 package  asset patho
+from ament_index_python.packages import get_package_share_directory
+
+share_dir = get_package_share_directory("sim_human")
+xml_path_ = os.path.join(share_dir, "myoelbow_1dof6muscles_1dofexo.xml")
+env = ElbowMuscleBrain("M1", kp=25.0, kd=3.0, xml_path=xml_path_)
 
 # Start MuJoCo Viewer
 print("MuJoCo Viewer Starts...")

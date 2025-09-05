@@ -5,7 +5,7 @@ services:
       dockerfile: docker/Dockerfile
     container_name: wearable_mujoco_simulation
     volumes:
-      - ../:/app:rw
+      - ../:/wearable_ws/src/sim_human:rw
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
     environment:
       - DISPLAY=${DISPLAY}
@@ -15,5 +15,6 @@ services:
     privileged: true
     stdin_open: true
     tty: true
-    command: bash -c "source /opt/ros/humble/setup.bash && source .venv/bin/activate && python simulation.py"
-    # command: bash
+    command: bash
+    #command: bash -c "source /opt/ros/humble/setup.bash && source .venv/bin/activate && python sim_human/simulation.py"
+    #command: bash -c "source /opt/ros/humble/setup.bash && source .venv/bin/activate && python sim_human/simulation.py"

@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-cd /app
+cd /wearable_ws/src/sim_human
 
 if [ ! -d ".venv" ]; then
     echo "Creating virtual environment with Python 3.10..."

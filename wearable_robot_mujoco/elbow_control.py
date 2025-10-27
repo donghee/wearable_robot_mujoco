@@ -3,10 +3,9 @@ import mujoco
 import cvxpy as cp
 import json
 
-
 import os
 from ament_index_python.packages import get_package_share_directory
-share_dir = get_package_share_directory("sim_human")
+share_dir = get_package_share_directory("wearable_robot_mujoco")
 patient_models = os.path.join(share_dir, "config", "patient_models.json")
 #  patient_models = "patient_models.json"
 
@@ -14,6 +13,8 @@ class ElbowMuscleBrain():
     
     def __init__(self, PModel, kp=25.0, kd=3.0, xml_path="myoelbow_1dof6muscles.xml"):
         super(ElbowMuscleBrain, self).__init__()
+
+        self.vel_cmd = 0.0
 
         # Load MuJoCo model 
         self.model = mujoco.MjModel.from_xml_path(xml_path)
@@ -58,6 +59,9 @@ class ElbowMuscleBrain():
 
         # device sensor parameter
         self.sensor_dist = self._get_sensor_dist()
+
+    def set_velocity_command(self, vel_cmd):
+        self.vel_cmd = vel_cmd
 
     def _init_patient_model(self):
 
@@ -314,7 +318,7 @@ class ElbowMuscleBrain():
         u_integrated = self.Spinal_cord(u_ff, u_fb)
 
         # elbow control mechanism (Exo velocity control)
-        vel_cmd = self.control_logic() 
+        vel_cmd = self.vel_cmd 
         
         # execution
         self.data.ctrl[0:6] = np.clip(u_integrated.flatten(), 0.0, 1.0)              

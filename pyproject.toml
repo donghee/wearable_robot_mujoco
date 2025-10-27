@@ -1,5 +1,5 @@
 [project]
-name = "sim_human"
+name = "wearable_robot_mujoco"
 version = "0.8.28"
 description = "Add your description here"
 readme = "README.md"

@@ -1,7 +1,8 @@
 from setuptools import find_packages, setup
+import os
 from glob import glob
 
-package_name = 'sim_human'
+package_name = 'wearable_robot_mujoco'
 
 setup(
     name=package_name,
@@ -11,9 +12,9 @@ setup(
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name, ['myoelbow_1dof6muscles_1dofexo.xml']),
-        ('share/' + package_name + '/assets', ['assets/myoelbow_assets.xml']),
-        ('share/' + package_name + '/assets', ['assets/myoelbow_1dof6muscles_1dofexo_body_revised_2.xml']),
-        ('share/' + package_name + '/myo_sym', [ path for path in glob('myo_sym/*/*', recursive=True)]), 
+        ('share/' + package_name + '/assets', glob('assets/*', recursive=True)),
+        ('share/' + package_name + '/assets', glob('myo_sim/meshes/*', recursive=True)),
+        ('share/' + package_name + '/assets', glob('myo_sim/textures/*', recursive=True)),
         ('share/' + package_name + '/config', ['patient_models.json']),
     ],
     install_requires=[
@@ -32,10 +33,10 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'sim_human_node = sim_human.main:main',
-            'elbow_control_node = sim_human.elbow_control:main',
-            'robot_control_node = sim_human.robot_control:main',
-            'simulation_node = sim_human.simulation:main',
+            'elbow_control_node = wearable_robot_mujoco.elbow_control:main',
+            'elbow_vel_cmd_node = wearable_robot_mujoco.elbow_vel_cmd:main',
+            'robot_control_node = wearable_robot_mujoco.robot_control:main',
+            'simulation_node = wearable_robot_mujoco.simulation:main',
         ],
     },
 )

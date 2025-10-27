@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-cd /wearable_ws/src/sim_human
+cd /wearable_ws/src/wearable_robot_mujoco
 
 if [ ! -d ".venv" ]; then
     echo "Creating virtual environment with Python 3.10..."

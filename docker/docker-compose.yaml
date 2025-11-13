@@ -6,6 +6,8 @@ services:
     container_name: wearable_robot_mujoco
     volumes:
       - ../:/wearable_ws/src/wearable_robot_mujoco:rw
+      - ../../Patient:/wearable_ws/Patient:rw
+      - ../../Index.dat:/wearable_ws/Index.dat:rw
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
     environment:
       - DISPLAY=${DISPLAY}

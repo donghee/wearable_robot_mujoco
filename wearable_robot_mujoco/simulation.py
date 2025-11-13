@@ -15,7 +15,58 @@ from ament_index_python.packages import get_package_share_directory
 
 import rclpy
 from std_msgs.msg import Float64
-#
+
+from datetime import datetime
+from pathlib import Path
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+#  CSV_PATH = os.path.join("wearable_robot_eval", f"elbow_joint_quaternion_{timestamp}.csv")
+BASE_DIR = Path.cwd()
+INDEX_FILE = BASE_DIR / "Index.dat"
+PATIENT_DIR = BASE_DIR / "Patient"
+#CSV_PATH = PATIENT_DIR / f"elbow_joint_quaternion_{timestamp}.csv"
+
+def read_patient_name_from_index():
+    try:
+        with open(INDEX_FILE, 'r', encoding='utf-8') as f:
+            patient_name = f.readline().strip()
+        return patient_name
+    except Exception as e:
+        raise Exception(f"Index.dat Cannot found: {str(e)}")
+
+PATIENT_NAME = read_patient_name_from_index()
+CSV_PATH = PATIENT_DIR / f"{PATIENT_NAME}" / "result.csv"
+
+class SimulationReporter:
+    def __init__(self, filename):
+        self.filename = filename
+        self.data = []
+
+    def log(self, info):
+        self.data.append(info)
+
+    def save(self):
+        import csv
+        headers = [
+            "timestamp_sec",  # simulation time
+            "step",
+            "elbow_angle_rad",
+            "elbow_qx", "elbow_qy", "elbow_qz", "elbow_qw",
+            "target_angle_rad",
+            "angular_velocity",
+            "target_torque",
+            "actual_torque",
+            "motor_torque"  # 추가: 모터 토크
+        ]
+
+        with open(self.filename, 'w', newline='') as csvfile:
+            csv_writer = csv.writer(csvfile)
+            csv_writer.writerow(headers)
+            for row in self.data:
+                csv_writer.writerow(row)
+
+        with open(INDEX_FILE, 'w', encoding='utf-8') as f:
+            f.write(f"{PATIENT_NAME}\n1\n1\n")
+
 class SimulationNode(Node):
     def __init__(self):
         super().__init__('simulation_node')
@@ -66,6 +117,9 @@ class SimulationNode(Node):
         # Create timer for simulation loop
         self.timer = self.create_timer(0.01, self.simulation_step)
 
+        # logger for results
+        self.report = SimulationReporter(CSV_PATH)
+
     def vel_cmd_callback(self, msg):
         self.get_logger().info(f"Received vel_cmd: {msg.data}")
         self.vel_cmd = msg.data
@@ -73,7 +127,11 @@ class SimulationNode(Node):
 
     def simulation_step(self):
         if not self.viewer.is_running() or self.step_count >= self.MAX_STEPS:
-            self.cleanup_and_shutdown()
+            self.cleanup()
+            self.get_logger().info("Simulation finished.")
+            # exit the node
+            self.destroy_node()
+            sys.exit(0)
             return
 
         # Env step process
@@ -92,17 +150,54 @@ class SimulationNode(Node):
         # Publish target angle and current angle
         self.publish_status(info)
 
+        # Log data for results.csv
+        sim_time = float(self.env.data.time)
+        elbow_angle = self.env.data.qpos[0]
+        elbow_velocity = self.env.data.qvel[0]
+
+        half_angle = elbow_angle / 2.0
+        qx, qy, qz = 0.0, np.sin(half_angle), 0.0
+        qw = np.cos(half_angle)
+
+        target_angle = info.get("target_angle", 0.0)
+        target_torque = info.get("input", 0.0)
+        actual_torque = info.get("actuation", 0.0)
+
+        # 모터 토크 계산 (엑소스켈레톤 모터의 실제 토크)
+        motor_torque = self.env.data.ctrl[6] * self.env.gear  # 모터 토크 명령 × 기어비
+
+        row_data = [
+            sim_time,
+            self.step_count,
+            elbow_angle,
+            qx, qy, qz, qw,
+            target_angle,
+            elbow_velocity,
+            target_torque,
+            actual_torque,
+            motor_torque  # 추가: 모터 토크
+        ]
+        self.report.log(row_data)
+
+        #self.get_logger().info(f"Step {self.step_count}: ")
+        #self.get_logger().info(sim_time.__str__())
+        #self.get_logger().info(elbow_angle.__str__())
+        #self.get_logger().info(target_angle.__str__())
+
+
     def publish_status(self, info):
         target_angle = info["target_angle"]
         msg = Float64()
         msg.data = target_angle
         self.status_publisher.publish(msg)
 
-    def cleanup_and_shutdown(self):
+    def cleanup(self):
+        self.get_logger().info(f"Generated result csv: {CSV_PATH}")
+        self.report.save()
         self.env.close()
         self.renderer.close()
         self.get_logger().info("MuJoCo Viewer ended.")
-        rclpy.shutdown()
+        # exit the program
 
 
 def main(args=None):

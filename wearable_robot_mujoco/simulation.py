@@ -120,6 +120,8 @@ class SimulationNode(Node):
         # logger for results
         self.report = SimulationReporter(CSV_PATH)
 
+        self.vel_cmd = 0.0
+
     def vel_cmd_callback(self, msg):
         self.get_logger().info(f"Received vel_cmd: {msg.data}")
         self.vel_cmd = msg.data
@@ -132,6 +134,9 @@ class SimulationNode(Node):
             # exit the node
             self.destroy_node()
             sys.exit(0)
+            return
+
+        if self.vel_cmd == 0:
             return
 
         # Env step process

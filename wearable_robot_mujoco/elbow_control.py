@@ -11,7 +11,7 @@ patient_models = os.path.join(share_dir, "config", "patient_models.json")
 
 class ElbowMuscleBrain():
     
-    def __init__(self, PModel, kp=25.0, kd=3.0, xml_path="myoelbow_1dof6muscles.xml"):
+    def __init__(self, PModel, kp=5.0, kd=1.0, xml_path="myoelbow_1dof6muscles.xml"):
         super(ElbowMuscleBrain, self).__init__()
 
         self.vel_cmd = 0.0
@@ -41,9 +41,13 @@ class ElbowMuscleBrain():
         self.prev_err = 0.0
         self.d_hat = np.zeros((6,1))
         self.act = np.zeros((6,1))
+        self.beta = 1.0
 
         self.kp = kp
         self.kd = kd
+
+        # quantization
+        self.n = 10
 
         # Muscle parameter
         self.rest_length = np.copy(self.data.actuator_length)
@@ -65,6 +69,25 @@ class ElbowMuscleBrain():
 
     def _init_patient_model(self):
 
+        self.V_gain = 1.0
+        self.beta = 1.0
+        self.RI_ratio = 1.0
+        self.n = 10
+        R_gain = 1.0
+        self.Fmax = 1.0
+        self.K_pass = 0.5
+        self.L_opt = 1.0
+
+        # if R_gain < 0.3:
+        #     self.R_gain = np.array([R_gain] * 6)
+        # else:
+        #     self.R_gain = np.array([
+        #         0.3, 0.3, 0.3,       # Triceps (TRIlong, TRIlat, TRImed)
+        #         R_gain, R_gain, R_gain  # Biceps (BIClong, BICshort, BRA)
+        #     ])
+        self.R_gain = np.array([R_gain] * 6)
+
+        triceps_ids = [0, 1, 2]
         biceps_ids = [3, 4, 5]
 
         # at first, save actuator parameter
@@ -74,12 +97,22 @@ class ElbowMuscleBrain():
             self._base_ctrlrange = np.copy(self.model.actuator_ctrlrange)
             self._base_lengthrange = np.copy(self.model.actuator_lengthrange)
 
-        for i in biceps_ids:
+        for i in [0,1,2,3,4,5]:
             # reset to base first
-            self.model.actuator_gainprm[i][0] = self._base_gainprm[i][0] * self.Fmax
+            self.model.actuator_gainprm[i][2] = self._base_gainprm[i][2] * self.Fmax
             self.model.actuator_dynprm[i][0] = self._base_dynprm[i][0] * (2 * self.K_pass)
             self.model.actuator_ctrlrange[i][1] = self._base_ctrlrange[i][1] * self.L_opt
             self.model.actuator_lengthrange[i][1] = self._base_lengthrange[i][1] * self.L_opt
+        
+        # L_opt_scale = self.L_opt
+        # F_max_scale = self.Fmax
+        # K_pass_scale = 2 * self.K_pass
+
+        # for i in biceps_ids:
+        #     self.model.actuator_gainprm[i][0] *= F_max_scale    # F_max
+        #     self.model.actuator_dynprm[i][0] *= K_pass_scale        # K_pass
+        #     self.model.actuator_ctrlrange[i][1] *= L_opt_scale  # range max
+        #     self.model.actuator_lengthrange[i][1] *= L_opt_scale  # lmax 
 
     def _load_model_from_json(self, json_path, model_name):
 
@@ -106,23 +139,16 @@ class ElbowMuscleBrain():
                 R_gain, R_gain, R_gain  # Biceps (BIClong, BICshort, BRA)
             ])
 
-    ##################  Task Scheduling   ##################
+    def _update_desired_angle(self):
 
-    def _update_desired_angle(self):  # Motion Task
-
+        alpha = 0.5
+        
         # rythm
         if self.current_time % (2 * self.switch_interval) < self.switch_interval:
             self.target_th = np.deg2rad(130)
         else:
-            self.target_th = np.deg2rad(10)
-
-    ################## Functions related to Elbow Motions  ##################
+            self.target_th = np.deg2rad(5)
         
-    def PMC_SMA(self):
-
-        self._update_desired_angle()
-
-        alpha = 0.5
         # trajectory generation
         acc = self.omega_n ** 2 * (self.target_th - self.trajectory_angle) - 2 * self.zeta * self.omega_n * self.trajectory_velocity
         self.trajectory_velocity += acc * self.ctrl_period
@@ -138,14 +164,17 @@ class ElbowMuscleBrain():
 
         self.current_time += self.ctrl_period
         self.q_des_cache = (q_des, qdot_des, qddot_des)
-
         return q_des
+
+    def PMC_SMA(self):
+
+        return self._update_desired_angle()
 
     def _Striatum(self, target_angle):
         # PD controller        
         err_p = target_angle - self.data.qpos[0]
         err_d = (err_p - self.prev_err) / self.ctrl_period
-        target_torque = self.kp*err_p + self.kd*err_d + self.data.qfrc_bias[0]
+        target_torque = self.kp*err_p + self.kd*err_d + self.beta * (self.data.qfrc_bias[0] - self.data.qfrc_passive[0])
         
         self.prev_err = err_p
 
@@ -156,17 +185,26 @@ class ElbowMuscleBrain():
         Ta, Tp = self._compute_muscle_torques(self.model, self.data)
         Ta = Ta.reshape(1, -1)  # (1x6 matrix)
 
-        lambda_reg = 1e-3   # Regularization
+        lambda_reg = 1e-2   # Regularization
         gamma = 0.005       # Co-contraction gain (negative to encourage)
-        gamma_ri = 0.01     # Soft RI penalty
+        gamma_ri = 2.0    # Soft RI penalty
         
+        I3 = np.eye(3)
+        O3 = np.ones((3, 3))
+        k = (1.0 - self.RI_ratio) / 3.0
+        A = np.block([
+            [I3,       k * O3],
+            [k * O3,   I3    ]
+        ])
+
+
         # Optimization variables
         a = cp.Variable((6, 1))
+        a_eff = A @ a
 
         # QP optimization: Least Squares + co-contraction
         objective = cp.Minimize(
-            cp.norm2(Ta @ a - (target_torque - Tp))**2 + lambda_reg * cp.norm2(a)**2 +
-            gamma_ri * cp.square(cp.sum(a[0:3]) - (1 - self.RI_ratio) * cp.sum(a[3:6]))  # Co-contraction term
+            cp.norm2(Ta @ a_eff - (target_torque - Tp))**2 + lambda_reg * cp.norm2(a)**2 # + gamma_ri * (1.0 - self.RI_ratio) * cp.square(cp.sum(a[0:3]) -  cp.sum(a[3:6]))  # Co-contraction term
         )
 
         # Constraints (0 <= a <= 1)
@@ -180,11 +218,13 @@ class ElbowMuscleBrain():
         prob.solve(solver=cp.SCS, eps_abs=1e-4, eps_rel=1e-4)
 
         # Solution
-        a_opt = a.value 
+        a_opt = np.clip(A @a.value, 0.0, 1.0)
 
         if a_opt is None:
             a_opt = np.zeros((6, 1))
         
+        a_opt = self._quantize_pow2(a_opt, self.n)
+
         return a_opt
 
     def Basal_Ganglia(self, target_angle):
@@ -195,17 +235,19 @@ class ElbowMuscleBrain():
 
     def Thalamus(self, act):
         # To Do: design filter
-        tau = 0.001
-        alpha = (self.ctrl_period / (self.ctrl_period + tau))
+        # tau = 0.01
+        # alpha = (self.ctrl_period / (self.ctrl_period + tau))
 
-        act_filtered = alpha * act + (1 - alpha) * self.act
-        self.act = act_filtered
+        # act_filtered = alpha * act + (1 - alpha) * self.act
+        act_filtered = act
+        # self.act = act_filtered
 
         return act_filtered
 
     def M1(self, act_filtered):
 
-        u_ff = self.V_gain * act_filtered
+        # u_ff = self.V_gain * act_filtered
+        u_ff = np.clip(act_filtered, 0.0, self.V_gain)
 
         return u_ff
 
@@ -244,7 +286,7 @@ class ElbowMuscleBrain():
 
     def Spinal_cord(self, u_ff, u_fb):
         # neural integration
-        u_integrated = u_ff + u_fb + self._Reflex()
+        # u_integrated = u_ff + u_fb + self._Reflex()
         u_integrated = u_ff + self._Reflex()
 
         return u_integrated
@@ -385,3 +427,23 @@ class ElbowMuscleBrain():
         self.L_opt = params["L_opt"]
         self.Fmax = params["Fmax"]
         self._init_patient_model()
+
+    def _quantize_pow2(self, a, n, return_index=False):
+        """
+        a: [0,1] 범위의 ndarray (예: QP 해; shape (6,) 등)
+        n: 단계 수를 2^n으로 설정 (예: n=3 -> 8단계)
+        return_index: True면 (a_q, idx) 모두 반환. idx는 0..(2^n-1)
+
+        방식: 0과 1을 포함하는 mid-tread 균등 양자화.
+        """
+        a = np.asarray(a, dtype=float)
+        L = 1 << n                 # 2^n
+        if L < 2:
+            raise ValueError("n은 1 이상이어야 합니다.")
+
+        delta = 1.0 / (L - 1)      # 0..1 포함하려면 (L-1)로 나눔
+        idx = np.rint(a / delta)   # 가장 가까운 레벨로 반올림
+        idx = np.clip(idx, 0, L-1) # 인덱스 범위 제한
+        a_q = idx * delta          # 양자화된 값
+
+        return (a_q, idx.astype(int)) if return_index else a_q

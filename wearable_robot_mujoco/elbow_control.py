@@ -2,6 +2,7 @@ import numpy as np
 import mujoco
 import cvxpy as cp
 import json
+import xml.etree.ElementTree as ET
 
 import os
 from ament_index_python.packages import get_package_share_directory
@@ -17,6 +18,7 @@ class ElbowMuscleBrain():
         self.vel_cmd = 0.0
 
         # Load MuJoCo model 
+        self.xml_path = xml_path
         self.model = mujoco.MjModel.from_xml_path(xml_path)
         self.data = mujoco.MjData(self.model)
         self.model.opt.timestep = 0.002
@@ -51,6 +53,7 @@ class ElbowMuscleBrain():
 
         # Muscle parameter
         self.rest_length = np.copy(self.data.actuator_length)
+
         self._init_patient_model()
 
         # device joint parameter
@@ -68,15 +71,23 @@ class ElbowMuscleBrain():
         self.vel_cmd = vel_cmd
 
     def _init_patient_model(self):
+        # Read XML and read user attributes from <body> tag
+        xml_dir = os.path.dirname(self.xml_path)
+        user_xml_path = os.path.join(xml_dir, "assets", "myoelbow_1dof6muscles_1dofexo_body_revised_2.xml")
+        print(user_xml_path)
+        root = ET.parse(user_xml_path).getroot()
+        body_ = root.find("worldbody").find("body").find("body").find("body")
+        user_attrib = body_.attrib.get('user').split(' ')
+        print(f"User attribute: {user_attrib}")
 
-        self.V_gain = 1.0
-        self.beta = 1.0
-        self.RI_ratio = 1.0
-        self.n = 10
-        R_gain = 1.0
-        self.Fmax = 1.0
-        self.K_pass = 0.5
-        self.L_opt = 1.0
+        self.V_gain = float(user_attrib[0])
+        self.beta = float(user_attrib[1])
+        self.RI_ratio = float(user_attrib[2])
+        self.n = int(user_attrib[3])
+        R_gain = float(user_attrib[4])
+        self.Fmax = float(user_attrib[5])
+        self.K_pass = float(user_attrib[6])
+        self.L_opt = float(user_attrib[7])
 
         # if R_gain < 0.3:
         #     self.R_gain = np.array([R_gain] * 6)

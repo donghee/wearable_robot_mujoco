@@ -25,6 +25,8 @@ INDEX_FILE = BASE_DIR / "Index.dat"
 PATIENT_DIR = BASE_DIR / "Patient"
 #CSV_PATH = PATIENT_DIR / f"elbow_joint_quaternion_{timestamp}.csv"
 
+#import xml.etree.ElementTree as ET
+
 def read_patient_name_from_index():
     try:
         with open(INDEX_FILE, 'r', encoding='utf-8') as f:
@@ -90,6 +92,18 @@ class SimulationNode(Node):
         share_dir = get_package_share_directory("wearable_robot_mujoco")
         xml_path_ = os.path.join(share_dir, "myoelbow_1dof6muscles_1dofexo.xml")
         self.env = ElbowMuscleBrain("M1", kp=25.0, kd=3.0, xml_path=xml_path_)
+
+        # Read XML and read user attributes from <body> tag
+        #  print(xml_path_)
+        #  xml_dir = os.path.dirname(xml_path_)
+        #  user_xml_path = os.path.join(xml_dir, "assets", "myoelbow_1dof6muscles_1dofexo_body_revised_2.xml")
+        #  print(user_xml_path)
+        #  root = ET.parse(user_xml_path).getroot()
+        #  print(f"Root tag: {root.tag}")
+        #  body_ = root.find("worldbody").find("body").find("body").find("body")
+        #  print(f"Body tag: {body_.tag}, name: {body_.attrib.get('name')}, user: {body_.attrib.get('user')}")
+        #  user_attrib = body_.attrib.get('user').split(' ')
+        #  print(f"User attribute: {user_attrib}")
 
         # Start MuJoCo Viewer
         self.get_logger().info("MuJoCo Viewer Starts...")

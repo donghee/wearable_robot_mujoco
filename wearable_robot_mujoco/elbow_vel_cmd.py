@@ -1,6 +1,6 @@
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import Float64
+from std_msgs.msg import Float64, Float64MultiArray
 import numpy as np
 
 
@@ -10,16 +10,28 @@ class ElbowVelCmdNode(Node):
         
         # Create subscriber for vel_cmd
         self.status_subscriber = self.create_subscription(
-            Float64,
-            'target_angle',
+            Float64MultiArray,
+            'status',
             self.status_callback,
             10
         )
 
-        # Publisher for vel_cmd
+        # Publisher for commands
         self.vel_cmd_publisher = self.create_publisher(
             Float64,
             'vel_cmd',
+            10
+        )
+
+        self.torque_cmd_publisher = self.create_publisher(
+            Float64,
+            'torque_cmd',
+            10
+        )
+
+        self.position_cmd_publisher = self.create_publisher(
+            Float64,
+            'position_cmd',
             10
         )
         
@@ -28,6 +40,10 @@ class ElbowVelCmdNode(Node):
         self.switch_interval = 2.0
         self.target_th = np.deg2rad(130)
         self.ctrl_period = 0.02
+
+        self.current_position = 0.0
+        self.current_velocity = 0.0
+        self.current_force = 0.0
         
         # Create timer for periodic velocity command publishing
         self.timer = self.create_timer(self.ctrl_period, self.control_loop)
@@ -52,8 +68,8 @@ class ElbowVelCmdNode(Node):
 
     def status_callback(self, msg):
         # Update target angle from status message
-        self.target_th = msg.data
-        self.get_logger().info(f'Received target_angle: {np.rad2deg(self.target_th):.1f}°')
+        self.target_th, self.current_position, self.current_velocity, self.current_force = msg.data
+        self.get_logger().info(f'Received target angle: {np.rad2deg(self.target_th):.1f}°, position: {self.current_position:.2f}, velocity: {self.current_velocity:.2f}, force: {self.current_force:.2f}')
 
     def control_loop(self):
         # Update desired angle based on time

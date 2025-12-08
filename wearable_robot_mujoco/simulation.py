@@ -14,7 +14,7 @@ from elbow_control import ElbowMuscleBrain
 from ament_index_python.packages import get_package_share_directory
 
 import rclpy
-from std_msgs.msg import Float64
+from std_msgs.msg import Float64, Float64MultiArray
 
 from datetime import datetime
 from pathlib import Path
@@ -73,7 +73,7 @@ class SimulationNode(Node):
     def __init__(self):
         super().__init__('simulation_node')
 
-        # Create subscriber for vel_cmd
+        # Create subscriber for commands
         self.vel_cmd_subscriber = self.create_subscription(
             Float64,
             'vel_cmd',
@@ -81,10 +81,24 @@ class SimulationNode(Node):
             10
         )
 
-        # Create publisher for status (target_angle)
-        self.status_publisher = self.create_publisher(
+        self.torque_cmd_subscriber = self.create_subscription(
             Float64,
-            'target_angle',
+            'torque_cmd',
+            self.torque_cmd_callback,
+            10
+        )
+
+        self.position_cmd_subscriber = self.create_subscription(
+            Float64,
+            'position_cmd',
+            self.position_cmd_callback,
+            10
+        )
+
+        # Create publisher for status (target angle and current angle)
+        self.status_publisher = self.create_publisher(
+            Float64MultiArray,
+            'status',
             10
         )
 
@@ -140,6 +154,16 @@ class SimulationNode(Node):
         self.get_logger().info(f"Received vel_cmd: {msg.data}")
         self.vel_cmd = msg.data
         self.env.set_velocity_command(self.vel_cmd)
+
+    def torque_cmd_callback(self, msg):
+        self.get_logger().info(f"Received torque_cmd: {msg.data}")
+        torque_cmd = msg.data
+        # Todo: set torque command in the environment
+
+    def position_cmd_callback(self, msg):
+        self.get_logger().info(f"Received position_cmd: {msg.data}")
+        position_cmd = msg.data
+        # TODO: set position command in the environment
 
     def simulation_step(self):
         if not self.viewer.is_running() or self.step_count >= self.MAX_STEPS:
@@ -206,8 +230,11 @@ class SimulationNode(Node):
 
     def publish_status(self, info):
         target_angle = info["target_angle"]
-        msg = Float64()
-        msg.data = target_angle
+        current_position = self.env.sensor_position()  # position
+        current_velocity = self.env.sensor_velocity()  # velocity
+        current_force = self.env.sensor_force()  # muscle force
+        msg = Float64MultiArray()
+        msg.data = [target_angle, current_position, current_velocity, current_force]
         self.status_publisher.publish(msg)
 
     def cleanup(self):

@@ -6,7 +6,7 @@ cd "$(dirname "$0")"
 # TODO: use shell script instead of backend API
 curl -X POST http://localhost:5000/api/xml/copy
 
-docker compose up -d --force-recreate
+#docker compose up -d --force-recreate
 
 ./stop.sh simulation
 

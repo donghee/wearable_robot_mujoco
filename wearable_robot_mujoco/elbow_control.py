@@ -325,6 +325,9 @@ class ElbowMuscleBrain():
         reading = self.data.qfrc_passive[adr]   # Tendon은 passive component로 분류됨
 
         return reading
+
+    def simulation_time(self):
+        return self.current_time
    
     def control_logic(self):
         if self.target_th > np.deg2rad(90): # Task에 따라서(flexion, extension) 토크를 주는 간단한 동작
@@ -374,7 +377,7 @@ class ElbowMuscleBrain():
         vel_cmd = self.vel_cmd 
         
         # execution
-        self.data.ctrl[0:6] = np.clip(u_integrated.flatten(), 0.0, 1.0)              
+        self.data.ctrl[0:6] = np.clip(u_integrated.flatten(), 0.0, 1.0)         
         self.data.ctrl[7] = vel_cmd
 
         for _ in range(int(self.ctrl_period/self.model.opt.timestep)):  # controller sampling time에 맞게 

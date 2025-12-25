@@ -41,9 +41,11 @@ class ElbowVelCmdNode(Node):
         self.target_th = np.deg2rad(130)
         self.ctrl_period = 0.02
 
-        self.current_position = 0.0
-        self.current_velocity = 0.0
-        self.current_force = 0.0
+        self.sensor_position = 0.0 # modified_1208
+        self.sensor_velocity = 0.0 # modified_1208
+        self.sensor_force = 0.0 # modified_1208
+        self.previous_velocity = 0.0 # new_1208
+        self.target_ang = 0.0 # new_1208
         
         # Create timer for periodic velocity command publishing
         self.timer = self.create_timer(self.ctrl_period, self.control_loop)
@@ -55,28 +57,61 @@ class ElbowVelCmdNode(Node):
         if self.current_time % (2 * self.switch_interval) < self.switch_interval:
             self.target_th = np.deg2rad(130)
         else:
-            self.target_th = np.deg2rad(10)
+            self.target_th = np.deg2rad(5)
 
     def control_logic(self):
-        # Same logic as in ElbowMuscleBrain.control_logic()
-        if self.target_th > np.deg2rad(90):  # Task에 따라서(flexion, extension) 토크를 주는 간단한 동작
-            velocity = -1.2
-        else:
-            velocity = 1.2
         
+        DELTA_TIME = self.ctrl_period # new_1208
+        m = 0 # new_1208
+        c = 100 # new_1208
+        k = 0 # new_1208
+
+        # ################# Task 1 (Stiff) #################
+        # if self.target_th > np.deg2rad(90):  # Task에 따라서(flexion, extension) 토크를 주는 간단한 동작
+        #     velocity = -1.2  # flexion
+        # else:
+        #     velocity = 1.2  # extension
+
+        # ################# Task 2 (Compliant) new_1208 #################
+        # delta_velocity = self.sensor_velocity - self.previous_velocity
+        # acceleration = delta_velocity / DELTA_TIME
+        # acceleration = max(min(acceleration, 500.0), -500.0)
+        # self.previous_velocity = self.sensor_velocity
+        # delta_force = self.sensor_force * 1000 / 9.8   # dimension change
+
+        # if self.target_th > np.deg2rad(90):  # Task에 따라서(flexion, extension) 토크를 주는 간단한 동작
+        #     velocity = -0.6 + (delta_force - m * acceleration - k * (self.sensor_position - self.target_th)) / c # flexion
+        # else:
+        #     velocity = 1.2  # extension
+
+        ################# Task 3 (Resistive) new_1208   #################
+        delta_velocity = self.sensor_velocity - self.previous_velocity
+        acceleration = delta_velocity / DELTA_TIME
+        acceleration = max(min(acceleration, 500.0), -500.0)
+        self.previous_velocity = self.sensor_velocity
+        delta_force = self.sensor_force * 1000 / 9.8    # dimension change
+
+        if self.target_th > np.deg2rad(90):  # Task에 따라서(flexion, extension) 토크를 주는 간단한 동작
+            velocity = 0.2 + (delta_force - m * acceleration - k * (self.sensor_position - self.target_th)) / c # flexion
+        else:
+            velocity = 1.2  # extension
+
+
+
         return velocity
 
     def status_callback(self, msg):
         # Update target angle from status message
-        self.target_th, self.current_position, self.current_velocity, self.current_force = msg.data
-        self.get_logger().info(f'Received target angle: {np.rad2deg(self.target_th):.1f}°, position: {self.current_position:.2f}, velocity: {self.current_velocity:.2f}, force: {self.current_force:.2f}')
+        self.current_time, self.target_ang, self.sensor_position, self.sensor_velocity, self.sensor_force = msg.data # modified_1210
+        self.get_logger().info(f'Received target angle: {np.rad2deg(self.target_ang):.1f}°, position: {self.sensor_position:.2f}, velocity: {self.sensor_velocity:.2f}, force: {self.sensor_force:.2f}')
 
     def control_loop(self):
         # Update desired angle based on time
-        #self._update_desired_angle()
+        self._update_desired_angle()
+        # self.target_th = self.target_ang # new_1208 temporary
         
         # Get velocity command
-        vel_cmd = self.control_logic()
+        vel_cmd = self.control_logic() # modified_1208
         
         # Create and publish message
         msg = Float64()
@@ -85,7 +120,7 @@ class ElbowVelCmdNode(Node):
         self.vel_cmd_publisher.publish(msg)
         
         # Update time
-        self.current_time += self.ctrl_period
+        # self.current_time += self.ctrl_period
         
         # Optional: Log the command
         self.get_logger().info(f'Publishing vel_cmd: {vel_cmd:.2f}, target_angle: {np.rad2deg(self.target_th):.1f}°')

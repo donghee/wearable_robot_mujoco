@@ -56,8 +56,9 @@ class SimulationReporter:
             "target_angle_rad",
             "angular_velocity",
             "target_torque",
-            "actual_torque",
-            "motor_torque"  # 추가: 모터 토크
+            "human_torque",  # modified_1210
+            "motor_torque",  # 추가: 모터 토크
+            "inter_force" # 추가: 상호작용힘  new_1210
         ]
 
         with open(self.filename, 'w', newline='') as csvfile:
@@ -105,7 +106,7 @@ class SimulationNode(Node):
         # Get XML path from ROS2 package
         share_dir = get_package_share_directory("wearable_robot_mujoco")
         xml_path_ = os.path.join(share_dir, "myoelbow_1dof6muscles_1dofexo.xml")
-        self.env = ElbowMuscleBrain("M1", kp=25.0, kd=3.0, xml_path=xml_path_)
+        self.env = ElbowMuscleBrain("M1", kp=5.0, kd=1.0, xml_path=xml_path_)
 
         # Read XML and read user attributes from <body> tag
         #  print(xml_path_)
@@ -138,6 +139,7 @@ class SimulationNode(Node):
         self.cam.distance = 2       
         self.cam.lookat[:] = np.array([0.0, -0.5, 1.4])
 
+        #self.MAX_STEPS = 400 * 0.25
         self.MAX_STEPS = 400 * 10
         self.step_count = 0
         self.infos = []
@@ -158,7 +160,7 @@ class SimulationNode(Node):
     def torque_cmd_callback(self, msg):
         self.get_logger().info(f"Received torque_cmd: {msg.data}")
         torque_cmd = msg.data
-        # Todo: set torque command in the environment
+        # TODO: set torque command in the environment
 
     def position_cmd_callback(self, msg):
         self.get_logger().info(f"Received position_cmd: {msg.data}")
@@ -194,8 +196,9 @@ class SimulationNode(Node):
         self.publish_status(info)
 
         # Log data for results.csv
-        sim_time = float(self.env.data.time)
-        elbow_angle = self.env.data.qpos[0]
+        #sim_time = float(self.env.data.time)
+        sim_time = self.env.simulation_time()  # new_1210
+        elbow_angle = self.env.data.qpos[8]
         elbow_velocity = self.env.data.qvel[0]
 
         half_angle = elbow_angle / 2.0
@@ -207,7 +210,8 @@ class SimulationNode(Node):
         actual_torque = info.get("actuation", 0.0)
 
         # 모터 토크 계산 (엑소스켈레톤 모터의 실제 토크)
-        motor_torque = self.env.data.ctrl[6] * self.env.gear  # 모터 토크 명령 × 기어비
+        motor_torque = (self.env.data.ctrl[6] + self.env.data.ctrl[7]) * self.env.gear  # 모터 토크 명령 × 기어비
+        inter_force = self.env.sensor_force()
 
         row_data = [
             sim_time,
@@ -217,8 +221,9 @@ class SimulationNode(Node):
             target_angle,
             elbow_velocity,
             target_torque,
-            actual_torque,
-            motor_torque  # 추가: 모터 토크
+            actual_torque, # human torque
+            motor_torque,  # 추가: 모터 토크
+            inter_force # new_1210
         ]
         self.report.log(row_data)
 
@@ -228,13 +233,14 @@ class SimulationNode(Node):
         #self.get_logger().info(target_angle.__str__())
 
 
-    def publish_status(self, info):
+    def publish_status(self, info): # modified_1208
+        simulation_time = self.env.simulation_time()  # new_1210
         target_angle = info["target_angle"]
-        current_position = self.env.sensor_position()  # position
-        current_velocity = self.env.sensor_velocity()  # velocity
-        current_force = self.env.sensor_force()  # muscle force
+        sensor_position = self.env.sensor_position()  # position
+        sensor_velocity = self.env.sensor_velocity()  # velocity
+        sensor_force = self.env.sensor_force()  # muscle force
         msg = Float64MultiArray()
-        msg.data = [target_angle, current_position, current_velocity, current_force]
+        msg.data = [simulation_time, target_angle, sensor_position, sensor_velocity, sensor_force]
         self.status_publisher.publish(msg)
 
     def cleanup(self):

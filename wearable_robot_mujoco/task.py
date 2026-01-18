@@ -1,4 +1,6 @@
-upperlimb = None
+from .wearable_robot_api import Upperlimb_1DOF
+
+upperlimb = Upperlimb_1DOF()
 
 def setup():
     upperlimb.init(rep_count=20, freq=60)
@@ -22,5 +24,5 @@ def loop():
     if upperlimb.get_target_angle() > 90:
         velocity = -0.6 + (delta_force - m * acceleration - k * (upperlimb.get_position() - upperlimb.get_target_angle())) / c # flexion
     else:
-        velocity = 5.2  # extension
+        velocity = 1.2  # extension
     upperlimb.set_velocity(velocity)

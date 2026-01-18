@@ -4,10 +4,53 @@ from std_msgs.msg import Float64, Float64MultiArray
 import numpy as np
 
 
+class Upperlimb_1DOF:
+    """API class for controlling the upper limb exoskeleton"""
+
+    def __init__(self, node=None):
+        self.node = node
+        self.rep_count = 0
+        self.freq = 60
+        self.velocity_cmd = 0.0
+
+    def init(self, rep_count=20, freq=60):
+        """Initialize the upperlimb control parameters"""
+        self.rep_count = rep_count
+        self.freq = freq
+        if self.node:
+            self.node.get_logger().info(f'Upperlimb_1DOF initialized: rep_count={rep_count}, freq={freq}')
+
+    def get_target_angle(self):
+        """Get the current target angle in degrees"""
+        if self.node:
+            return np.rad2deg(self.node.target_th)
+        return 0.0
+
+    def set_velocity(self, velocity):
+        """Set the velocity command"""
+        self.velocity_cmd = velocity
+
+    def get_velocity_cmd(self):
+        """Get the current velocity command"""
+        return self.velocity_cmd
+
+    def get_velocity(self):
+        """Get the current sensor velocity"""
+        if self.node:
+            return self.node.sensor_velocity
+        return 0.0
+
+    def get_previous_velocity(self):
+        """Get the previous sensor velocity"""
+        if self.node:
+            return self.node.previous_velocity
+        return 0.0
+
+
 class ElbowVelCmdNode(Node):
     def __init__(self):
         super().__init__('elbow_vel_cmd_node')
-        
+
         # Create subscriber for vel_cmd
         self.status_subscriber = self.create_subscription(
             Float64MultiArray,
@@ -34,7 +77,7 @@ class ElbowVelCmdNode(Node):
             'position_cmd',
             10
         )
-        
+
         # Control parameters (same as ElbowMuscleBrain)
         self.current_time = 0.0
         self.switch_interval = 2.0
@@ -46,11 +89,29 @@ class ElbowVelCmdNode(Node):
         self.sensor_force = 0.0 # modified_1208
         self.previous_velocity = 0.0 # new_1208
         self.target_ang = 0.0 # new_1208
-        
+
+        # Initialize Upperlimb_1DOF API and load task
+        self.upperlimb = Upperlimb_1DOF(node=self)
+        self._load_task_module()
+
         # Create timer for periodic velocity command publishing
         self.timer = self.create_timer(self.ctrl_period, self.control_loop)
-        
-        self.get_logger().info('Elbow Vel Cmd Publisher Node started')
+
+        self.get_logger().info('Elbow Vel Cmd Publisher Node started with task integration')
+
+    def _load_task_module(self):
+        """Load task module and call its setup function"""
+        try:
+            from . import task
+            self.task_module = task
+            # Set the upperlimb instance for task module
+            task.upperlimb = self.upperlimb
+            # Call setup function
+            task.setup()
+            self.get_logger().info('task module loaded and setup() called successfully')
+        except Exception as e:
+            self.get_logger().error(f'Failed to load task module: {e}')
+            self.task_module = None
 
     def _update_desired_angle(self):
         # Motion Task - same logic as in ElbowMuscleBrain
@@ -109,19 +170,30 @@ class ElbowVelCmdNode(Node):
         # Update desired angle based on time
         self._update_desired_angle()
         # self.target_th = self.target_ang # new_1208 temporary
-        
-        # Get velocity command
-        vel_cmd = self.control_logic() # modified_1208
-        
+
+        if self.task_module: # If task module is loaded
+            try:
+                self.task_module.loop()
+                # Get velocity command from upperlimb API
+                vel_cmd = self.upperlimb.get_velocity_cmd()
+                self.previous_velocity = self.sensor_velocity # new_1208
+            except Exception as e:
+                self.get_logger().error(f'Error in task.loop(): {e}')
+                # Fallback to original control logic
+                vel_cmd = self.control_logic()
+        else:
+            # Fallback to original control logic if task not loaded
+            vel_cmd = self.control_logic()
+
         # Create and publish message
         msg = Float64()
         msg.data = vel_cmd
-        
+
         self.vel_cmd_publisher.publish(msg)
-        
+
         # Update time
         # self.current_time += self.ctrl_period
-        
+
         # Optional: Log the command
         self.get_logger().info(f'Publishing vel_cmd: {vel_cmd:.2f}, target_angle: {np.rad2deg(self.target_th):.1f}°')
 

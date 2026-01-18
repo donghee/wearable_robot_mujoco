@@ -1,4 +1,3 @@
-# upperlimb instance will be set by elbow_vel_cmd.py
 upperlimb = None
 
 def setup():

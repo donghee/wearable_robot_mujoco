@@ -4,4 +4,4 @@ cd "$(dirname "$0")"
 
 docker compose up -d --force-recreate
 
-code ../wearable_robot_mujoco/task1.py
+code ../wearable_robot_mujoco/task.py

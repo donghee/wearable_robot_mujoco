@@ -40,7 +40,7 @@ class ElbowVelCmdNode(Node):
         self.current_time = 0.0
         self.switch_interval = 2.0
         self.target_th = np.deg2rad(130)
-        self.ctrl_period = 0.02
+        self.DELTA_TIME = 0.02 # control period
 
         self.sensor_position = 0.0 # modified_1208
         self.sensor_velocity = 0.0 # modified_1208
@@ -53,7 +53,7 @@ class ElbowVelCmdNode(Node):
         self._load_task_module()
 
         # Create timer for periodic velocity command publishing
-        self.timer = self.create_timer(self.ctrl_period, self.control_loop)
+        self.timer = self.create_timer(self.DELTA_TIME, self.control_loop)
 
         self.get_logger().info('Elbow Vel Cmd Publisher Node started with task integration')
 
@@ -76,8 +76,6 @@ class ElbowVelCmdNode(Node):
             self.target_th = np.deg2rad(5)
 
     def control_logic(self):
-        
-        DELTA_TIME = self.ctrl_period # new_1208
         m = 0 # new_1208
         c = 100 # new_1208
         k = 0 # new_1208
@@ -90,7 +88,7 @@ class ElbowVelCmdNode(Node):
 
         # ################# Task 2 (Compliant) new_1208 #################
         # delta_velocity = self.sensor_velocity - self.previous_velocity
-        # acceleration = delta_velocity / DELTA_TIME
+        # acceleration = delta_velocity / self.DELTA_TIME
         # acceleration = max(min(acceleration, 500.0), -500.0)
         # self.previous_velocity = self.sensor_velocity
         # delta_force = self.sensor_force * 1000 / 9.8   # dimension change
@@ -102,7 +100,7 @@ class ElbowVelCmdNode(Node):
 
         ################# Task 3 (Resistive) new_1208   #################
         delta_velocity = self.sensor_velocity - self.previous_velocity
-        acceleration = delta_velocity / DELTA_TIME
+        acceleration = delta_velocity / self.DELTA_TIME
         acceleration = max(min(acceleration, 500.0), -500.0)
         self.previous_velocity = self.sensor_velocity
         delta_force = self.sensor_force * 1000 / 9.8    # dimension change
@@ -111,8 +109,6 @@ class ElbowVelCmdNode(Node):
             velocity = 0.2 + (delta_force - m * acceleration - k * (self.sensor_position - self.target_th)) / c # flexion
         else:
             velocity = 1.2  # extension
-
-
 
         return velocity
 
@@ -147,7 +143,7 @@ class ElbowVelCmdNode(Node):
         self.vel_cmd_publisher.publish(msg)
 
         # Update time
-        # self.current_time += self.ctrl_period
+        # self.current_time += self.DELTA_TIME
 
         # Optional: Log the command
         self.get_logger().info(f'Publishing vel_cmd: {vel_cmd:.2f}, target_angle: {np.rad2deg(self.target_th):.1f}°')

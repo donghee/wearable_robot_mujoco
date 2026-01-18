@@ -1,4 +1,4 @@
-import numpy as np
+import math
 
 
 class Upperlimb_1DOF:
@@ -22,7 +22,7 @@ class Upperlimb_1DOF:
         self.rep_count = 0
         self.freq = 60
         self.velocity_cmd = 0.0
-        self.DELTA_TIME = 0.02  # Control period (20ms)
+        self.DELTA_TIME = self.node.DELTA_TIME if self.node else 0.02 # Use node's DELTA_TIME if available, else default to 0.02s
         self._initialized = True
 
     def init(self, rep_count=20, freq=60):
@@ -35,7 +35,7 @@ class Upperlimb_1DOF:
     def get_target_angle(self):
         """Get the current target angle in degrees"""
         if self.node:
-            return np.rad2deg(self.node.target_th)
+            return math.degrees(self.node.target_th)
         return 0.0
 
     def set_velocity(self, velocity):

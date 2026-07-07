@@ -36,11 +36,20 @@ class ElbowVelCmdNode(Node):
             10
         )
 
+        self.stop_cmd_publisher = self.create_publisher(
+            Float64,
+            'stop_cmd',
+            10
+        )
+
         # Control parameters (same as ElbowMuscleBrain)
         self.current_time = 0.0
         self.switch_interval = 2.0
         self.target_th = np.deg2rad(130)
         self.DELTA_TIME = 0.02 # control period
+
+        self.rep_counter = 0
+        self.stop_published = False
 
         self.sensor_position = 0.0 # modified_1208
         self.sensor_velocity = 0.0 # modified_1208
@@ -70,10 +79,23 @@ class ElbowVelCmdNode(Node):
 
     def _update_desired_angle(self):
         # Motion Task - same logic as in ElbowMuscleBrain
+        previous_th = self.target_th
+
         if self.current_time % (2 * self.switch_interval) < self.switch_interval:
             self.target_th = np.deg2rad(130)
         else:
             self.target_th = np.deg2rad(5)
+
+        if previous_th != self.target_th:
+            self.rep_counter += 1
+            self.get_logger().info(f'Angle change {self.rep_counter}/{self.upperlimb.rep_count * 2}')
+
+            if self.rep_counter >= self.upperlimb.rep_count * 2 and not self.stop_published:
+                stop_msg = Float64()
+                stop_msg.data = 1.0
+                self.stop_cmd_publisher.publish(stop_msg)
+                self.stop_published = True
+                self.get_logger().info(f'Reached rep_count={self.upperlimb.rep_count}, publishing stop_cmd')
 
     def control_logic(self):
         m = 0 # new_1208

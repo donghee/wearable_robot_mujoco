@@ -6,20 +6,20 @@ class Upperlimb_1DOF:
 
     _instance = None
 
-    def __new__(cls, node=None):
+    def __new__(cls, node=None, rep_count=20):
         if cls._instance is None:
             cls._instance = super(Upperlimb_1DOF, cls).__new__(cls)
             cls._instance._initialized = False
         return cls._instance
 
-    def __init__(self, node=None):
+    def __init__(self, node=None, rep_count=20):
         if self._initialized:
             if node is not None:
                 self.node = node
             return
 
         self.node = node
-        self.rep_count = 0
+        self.rep_count = rep_count
         self.freq = 60
         self.velocity_cmd = 0.0
         self.DELTA_TIME = self.node.DELTA_TIME if self.node else 0.02 # Use node's DELTA_TIME if available, else default to 0.02s

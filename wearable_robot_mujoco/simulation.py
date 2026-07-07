@@ -96,6 +96,13 @@ class SimulationNode(Node):
             10
         )
 
+        self.stop_cmd_subscriber = self.create_subscription(
+            Float64,
+            'stop_cmd',
+            self.stop_cmd_callback,
+            10
+        )
+
         # Create publisher for status (target angle and current angle)
         self.status_publisher = self.create_publisher(
             Float64MultiArray,
@@ -151,6 +158,7 @@ class SimulationNode(Node):
         self.report = SimulationReporter(CSV_PATH)
 
         self.vel_cmd = 0.0
+        self.stop_received = False
 
     def vel_cmd_callback(self, msg):
         self.get_logger().info(f"Received vel_cmd: {msg.data}")
@@ -167,8 +175,12 @@ class SimulationNode(Node):
         position_cmd = msg.data
         # TODO: set position command in the environment
 
+    def stop_cmd_callback(self, msg):
+        self.get_logger().info(f"Received stop_cmd: {msg.data}")
+        self.stop_received = True
+
     def simulation_step(self):
-        if not self.viewer.is_running() or self.step_count >= self.MAX_STEPS:
+        if not self.viewer.is_running() or self.step_count >= self.MAX_STEPS or self.stop_received:
             self.cleanup()
             self.get_logger().info("Simulation finished.")
             # exit the node
